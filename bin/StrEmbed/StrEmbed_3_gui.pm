@@ -18,6 +18,7 @@
 
 # StrEmbed::StrEmbed_3_gui.pm
 # StrEmbed-3 release A - HHC 2017-01-06
+# HHC - 2017-01-10 - post Release A
 
 require 5.002;
 use warnings;
@@ -25,21 +26,19 @@ use strict;
 use Tk;
 use Tk::Font;
 use Tk::Balloon;
+# use Tk::Hlist;
 use Tk::Tree;
-# use lib 'My/Tk-RotCanvas';
-# require 'My/Tk-RotCanvas/RotCanvas.pm';
-#use Tk::FileDialog;
-#use Tk::DirTree;
-#use Cwd;
-#use Tk::FileSelect;
+use Tk::DirTree;
+# use Tk::Dialog;
 
 our $max;
 our %elements_available;
 
 my ($x_normal, $y_normal) = (1440, 720);
 my ($x_min, $y_min) = (640, 480);
-my $element_radius = 6;
-my $activewidth_is_covered_by = 3;
+my $element_radius = 8;
+my $activewidth_is_covered_by = 5;
+my $hightlighted_width_is_covered_by = 3;
 my $mw;
 my $c;
 my @array_with_coords;
@@ -61,7 +60,8 @@ my $quit_optimisation;
 my %embedded;
 my %parts_at_height_1;
 my %lookup_label_to_id;
-my $menu_0;
+my $menu_00;
+my %entity;
 
 return 1;
 
@@ -99,14 +99,9 @@ sub tk_pulldown_menu {
         -fill => 'x',
     );
 
-    # my $file = "../step_data/input/puzzle_1b.STEP";
-    # my $file = ";
-    # my $file = ;
-    # my $file = ;
-    # my $file = "../step_data/input/lock_assy_5_parts_flat.STEP";
-
-    $menu_0 = $pm -> Menubutton( -text => "Open",
+    $menu_00 = $pm -> Menubutton( -text => "File",
         -menuitems => [
+            [ 'command' => "Open",             -command => sub { &open_file} ],
             [ 'command' => "puzzle 1b",        -command => sub { &step_open("../step_data/input/puzzle_1b.STEP"); &big_bundle; } ],
             [ 'command' => "puzzle 1c",        -command => sub { &step_open("../step_data/input/puzzle_1c.STEP"); &big_bundle; } ],
             [ 'command' => "puzzle 1d",        -command => sub { &step_open("../step_data/input/puzzle_1d.STEP"); &big_bundle; } ],
@@ -121,7 +116,26 @@ sub tk_pulldown_menu {
         -side => 'left',
     );
 
-    my $menu_01 = $pm -> Menubutton( -text => "Exit",
+    my $menu_01 = $pm -> Menubutton( -text => "Edit",
+        -menuitems => [
+            [ 'command' => "~Exit", -command => sub { exit } ],
+        ]
+    ) -> pack(
+        -anchor => 'nw',
+        -side => 'left',
+    );
+
+    my $menu_02 = $pm -> Menubutton( -text => "Unused",
+        -menuitems => [
+            [ 'command' => "O~ff", -command => sub { &tk_turn_off_is_covered_by } ],
+            [ 'command' => "O~n", -command => sub { &tk_turn_on_is_covered_by } ],
+        ]
+    ) -> pack(
+        -anchor => 'nw',
+        -side => 'left',
+    );
+
+    my $menu_03 = $pm -> Menubutton( -text => "Exit",
         -menuitems => [
             [ 'command' => "~Exit", -command => sub { exit } ],
         ]
@@ -208,13 +222,15 @@ sub tk_pulldown_menu {
     );
 
     my $menu_4 = $pm -> Menubutton( -text => "Plot",
-        -state => 'disabled',
+        # -state => 'disabled',
         -menuitems => [
-            [ 'command' => "~3-in-1", -command => sub {
+            [ 'command' => "clear\n~3-in-1", -command => sub {
+                &tk_clear_canvas;
                 &tk_optimise;
                 &tk_clear_canvas;
                 &tk_plot_is_covered_by;
                 &tk_plot_elements;
+                &tk_turn_off_is_covered_by;
             } ],
             "-",
             [ 'command' => "~Optimise",      -command => sub { &tk_optimise } ],
@@ -254,56 +270,11 @@ sub tk_pulldown_menu {
     );
 }
 
-sub tk_new_file {
+sub XXX_tk_new_file {
     print "tk_new_file\n";
 }
 
-
-=ss
-
-    my $LoadDialog = $mw -> FileDialog (
-        -Title => "Open file",
-        -Create => 1,
-    )
-}
-my $top = new MainWindow;
-$top->withdraw;
-
-my $t = $top->Toplevel;
-$t->title("Choose directory:");
-my $ok = 0;
-
-my $f = $t->Frame->pack(-fill => "x", -side => "bottom");
-
-my $curr_dir = 'd:';
-#my $curr_dir = Cwd::cwd();
-
-my $d;
-$d = $t->Scrolled('DirTree',
-                  -scrollbars => 'osoe',
-                  -width => 35,
-                  -height => 20,
-                  -selectmode => 'browse',
-                  -exportselection =>1,
-                  -browsecmd => sub { $curr_dir = shift },
-                  -command => sub { $ok = 1; },
-                 )->pack(-fill => "both", -expand => 1);
-
-$d->chdir($curr_dir);
-
-$f->Button(-text => 'Ok',
-           -command => sub { $ok = 1 })->pack(-side => 'left');
-$f->Button(-text => 'Cancel',
-           -command => sub { $ok = 1 })->pack(-side => 'left');
-
-$f->waitVariable(\$ok);
-
-if ($ok == 1) { warn "The resulting directory is '$curr_dir'\n"; }
-
-}  # end tk_new_file
-=cut
-
-sub tk_pass_tree {
+sub XXX_tk_pass_tree {
     my @list = &step_pass_tree;
     print "$_\n" foreach @list;
 }
@@ -344,7 +315,7 @@ sub tk_lower_frame {
 
     $status = $f -> Frame -> pack;
     $status -> Label(
-        -text => "Optimisation on\nHasse diagram",
+        -text => "Optimising\nHasse diagram",
         -font => ['*font', '10', 'bold'],
     ) -> grid(
         -row => 0,
@@ -507,7 +478,7 @@ sub tk_lower_frame {
 ### big bundle
 
 sub big_bundle {
-    $menu_0 -> configure(-state => 'disabled');
+    $menu_00 -> configure(-state => 'disabled');
     &step_produce_parent_child_pairs;
     &step_produce_assembly_has_parent;
     &tk_insert_tree_items;
@@ -529,7 +500,40 @@ sub big_bundle {
     &tk_optimise;
     &tk_clear_canvas;
     &tk_plot_is_covered_by;
-    &tk_plot_elements;                
+    &tk_plot_elements;
+    &tk_display_order;    
+}
+
+sub tk_display_order {
+    $c -> raise("element", "is_covered_by");
+    $c -> raise("is_covered_by_highlighted", "element");
+    $c -> raise("element_highlighted", "is_covered_by_highlighted");
+}
+
+### open file
+
+sub open_file {
+    print "open file\n";
+    my $popup = new MainWindow;
+    $popup -> geometry('+50+50');
+    $popup -> minsize(640, 480);
+    $popup -> optionAdd('*font', 'Helvetica 10');
+    $popup -> Label(-text => "Open file")->pack;
+
+    my $directory = $popup -> Scrolled( "DirTree",
+        -directory => "../step_data/input",
+        -scrollbars => 'e',
+    ) -> pack(
+        -fill => 'both',
+        -expand => 1,
+    );
+    
+    my $files = $popup -> Scrolled( "Listbox",
+        -scrollbars => 'e',
+    ) -> pack(
+        -fill => 'both',
+        -expand => 1,
+    );
 }
 
 ### assembly tree
@@ -540,9 +544,29 @@ sub tk_insert_tree_items {
     my @items = &step_produce_tree;
     foreach my $ref_list (@items) {
         my ($name, $item) = @{$ref_list};
-        $tree -> add($item, -text => $name);
+        # print "name = $name, item = $item\n";
+        $entity{$name} = $tree -> add($item,
+            -text => $name,
+            # -browsecmd => \&tk_callback_entity,
+        );
+        # print "eee $name\n";
     }
     $tree -> autosetmode;
+    $tree -> focusFollowsMouse;
+    $tree -> bind('<Button-3>' => \&tk_callback_tree);
+
+    while (my ($name, $value) = each %entity) {
+        # print "$name = $value\n";    # switched off 2017-01-16
+    }
+}
+
+sub tk_callback_tree{
+    print "tk_callback_tree\n";
+}
+
+sub tk_callback_entity {
+    print "tk_callback_entity\n";
+    
 }
 
 sub tk_assembly_tree {
@@ -569,9 +593,16 @@ sub tk_canvas {
     );
 }
 
-sub tk_tree {
+sub XXX_tk_tree {
     print "tk tree\n";
     &step_tree;
+}
+
+###
+### callbacks
+###
+
+sub tk_callback_hlist {
 }
 
 ###
@@ -584,11 +615,13 @@ sub tk_highlight_is_covered_by {
         foreach my $j (0..$#elements) {
             if ($array_with_coords[$h][$j]{label}) {
                 $array_with_coords[$h][$j]{colour} = 'black';
+                $array_with_coords[$h][$j]{active} = 1;
             }
         }
     }
     ### zero as well
     $array_with_coords[0][0]{colour} = 'black';
+    $array_with_coords[0][0]{width} = $hightlighted_width_is_covered_by;
 }
 
 sub tk_highlight_relations {
@@ -606,6 +639,8 @@ sub tk_highlight_relations {
         for (my $i=0; $i<$#chain; $i++) {
             # print "$chain[$i] - $chain[$i+1]\n";
             $is_covered_by{$chain[$i+1]}{$chain[$i]}{colour} = 'black';
+            $is_covered_by{$chain[$i+1]}{$chain[$i]}{width} = $hightlighted_width_is_covered_by;
+            $is_covered_by{$chain[$i+1]}{$chain[$i]}{active} = 1;
         }
     }
 
@@ -614,6 +649,8 @@ sub tk_highlight_relations {
     foreach my $atom (@atoms) {
         my $id = $lookup_label_to_id{$atom};
         $is_covered_by{0}{$id}{colour} = 'black';
+        $is_covered_by{0}{$id}{width} = $hightlighted_width_is_covered_by;
+        $is_covered_by{0}{$id}{active} = 1;
     }
 
 }
@@ -624,6 +661,18 @@ sub tk_embed_height_0 {
    $array_lookup_id_to_hash{$e}{label} = "0";
    $embedded{0} = 0;
    # $elements_available{0} = 0;  ??? inf zero - set to unavailable ???
+}
+
+sub fisher_yates_shuffle {
+    # Perl Cookbook 4.17. Randomizing an Array
+    # fisher_yates_shuffle( \@array ) : generate a random permutation of @array in place
+    my $array = shift;
+    my $i;
+    for ($i = @$array; --$i; ) {
+        my $j = int rand ($i+1);
+        next if $i == $j;
+        @$array[$i,$j] = @$array[$j,$i];
+    }
 }
 
 sub tk_embed_height_1 {
@@ -644,12 +693,14 @@ sub tk_embed_height_1 {
 
     ### embed thingies
     ### need tidying up - HHC 2017-01-05
-    FIRST_ATTEMPT: my @list = &tk_to_be_embedded_list;
+    FIRST_ATTEMPT:  my @list = &tk_to_be_embedded_list;
+                    # &fisher_yates_shuffle( \@list );  # seems okay-ish
     SECOND_ATTEMPT: my ($first) = @list;
     # print "there are @list\n";
     goto EXIT unless $first;
     goto EXIT if $first eq $top_level_assembly;
     my @siblings = &tk_siblings($first);
+    # &fisher_yates_shuffle( \@siblings );  # not here
     my $parent = &tk_parent($first);
 
     if ( &tk_check_if_all_exists(@siblings) ) {
@@ -699,6 +750,7 @@ sub tk_embed_height_1 {
 sub next_available_height_1 {
     my $sibling = shift;
     my @list = @_;
+    # &fisher_yates_shuffle( \@list );   # sounds good but actually not a good idea
     foreach my $element (@list) {
         my $label = $array_lookup_id_to_hash{$element}{label};        
         unless ($label) {
@@ -815,7 +867,7 @@ sub tk_is_atom_available {
 }
 
 sub tk_clear_canvas {
-    $c -> delete("is_covered_by", "element", "element_id", "element_label");
+    $c -> delete("is_covered_by", "element", "element_id", "element_label", "is_covered_by_highlighted", "element_highlighted");
 }
 
 sub tk_setup_initial_colour_for_covered_by {
@@ -825,7 +877,47 @@ sub tk_setup_initial_colour_for_covered_by {
             my ($x1, $y1, $z1) = @{$array_lookup_id_to_hash{$child} {canvas}};
             my ($x2, $y2, $z2) = @{$array_lookup_id_to_hash{$parent}{canvas}};
             $is_covered_by{$child}{$parent}{colour} = 'gray75';
+            $is_covered_by{$child}{$parent}{width} = 1;
+            $is_covered_by{$child}{$parent}{active} = 0;
         }
+    }
+}
+
+sub tk_turn_off_is_covered_by {
+    $c -> itemconfigure("is_covered_by", -state => 'hidden');
+    $c -> itemconfigure("element", -state => 'hidden');
+}
+
+sub tk_turn_on_is_covered_by {
+    $c -> itemconfigure("is_covered_by", -state => 'normal');
+    $c -> itemconfigure("element", -state => 'normal');
+    &tk_display_order;
+}
+
+sub tk_return_tag_is_covered_by {
+    my $switch = shift;
+    if ($switch) {
+        return "is_covered_by_highlighted";
+    } else {
+        return "is_covered_by";
+    }
+}
+
+sub tk_return_tag_element {
+    my $switch = shift;
+    if ($switch) {
+        return "element_highlighted";
+    } else {
+        return "element";
+    }
+}
+
+sub tk_return_element_colour {
+    my $switch = shift;
+    if ($switch) {
+        return "black";
+    } else {
+        return "gray75";
     }
 }
 
@@ -836,9 +928,10 @@ sub tk_plot_is_covered_by {
             my ($x1, $y1, $z1) = @{$array_lookup_id_to_hash{$child} {canvas}};
             my ($x2, $y2, $z2) = @{$array_lookup_id_to_hash{$parent}{canvas}};
             $is_covered_by{$child}{$parent}{entity} = $c->createLine($x1, $y1, $x2, $y2,
-                -tags => "is_covered_by",
+                -tags => &tk_return_tag_is_covered_by( $is_covered_by{$child}{$parent}{active} ),
                 -fill => $is_covered_by{$child}{$parent}{colour},
-                -activefill => 'black',
+                -width => $is_covered_by{$child}{$parent}{width},
+                -activefill => 'red',
                 -activewidth => $activewidth_is_covered_by,
             );
         }
@@ -850,6 +943,7 @@ sub tk_setup_initial_colour_for_elements {
         my @elements = @{$array_with_coords[$h]};
         foreach my $j (0..$#elements) {
             $array_with_coords[$h][$j]{colour} = 'gray95';
+            $array_with_coords[$h][$j]{active} = 0;
         }
     }
 }
@@ -868,16 +962,17 @@ sub tk_plot_elements {
             my $y2 = $y - $element_radius;     # upper
 
             $element{$id} = $c -> createOval($x1, $y1, $x2, $y2,
-                -tags => "element",
-                -outline => 'gray75',
+                -tags => &tk_return_tag_element( $array_with_coords[$h][$j]{active} ),
+                -outline => tk_return_element_colour( $array_with_coords[$h][$j]{active} ),
                 -fill => $array_with_coords[$h][$j]{colour},
-                -activeoutline => 'black',
+                -activeoutline => 'red',
                 -activefill => "red",
             );                                 # lower-left, upper-right
 
             $element_id{$id} = $c -> createText($x2 + $element_radius , $y2 - $element_radius,
                 -text => $array_with_coords[$h][$j]{id},
-                -tags => "element_id",
+                # -tags => "element_id",
+                -tags => &tk_return_tag_element( $array_with_coords[$h][$j]{active} ),
                 -fill => 'gray75',
             );
 
@@ -894,11 +989,11 @@ sub tk_plot_elements {
     }
 }
 
-sub tk_plot_ids {
+sub XXX_tk_plot_ids {
     print "tk plot ids\n";
 }
 
-sub tk_plot_labels {
+sub XXX_tk_plot_labels {
     print "tk plot labels\n";
 }
 
@@ -934,6 +1029,8 @@ sub tk_optimise {
         $zeros = 0 if $counter;
         last LABEL if $quit_optimisation;
     }
+    &tk_turn_off_is_covered_by;  # see what happens
+
 }
 
 sub tk_hamming_weight {
@@ -1053,35 +1150,3 @@ sub tk_scale_settings {
 
     return ($x_origin, $y_origin, $x_interval, $y_interval);
 }
-
-__DATA__
-
-Tk_FreeCursor received unknown cursor argument
-
-This application has requested the Runtime to terminate it in an unusual way.
-Please contact the application's support team for more information.
-
-sub tk_copyright {
-    print "StrEmbed_3  Copyright (C) 2016  University of Leeds
-This program comes with ABSOLUTELY NO WARRANTY; for details type `show w'.
-This is free software, and you are welcome to redistribute it
-under certain conditions; type `show c' for details.
-
-
-    my $popup = $mw->messageBox(
-        -title   => 'Open file',
-        -message => "We are displaying a silly message, do you wish to continue?",
-        -type    => 'YesNo',
-        -icon    => 'question',
-    );
-
-    if ( $popup eq 'No' ) {
-        exit;
-    } else {
-        my $popup2 = $mw->messageBox(
-            -title   => 'Really?',
-            -message => "We displayed silly message and you wish to continue?",
-            -type    => 'OK',
-            -icon    => 'question',
-        )
-    };

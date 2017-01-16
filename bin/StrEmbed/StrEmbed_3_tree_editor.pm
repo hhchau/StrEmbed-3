@@ -18,6 +18,7 @@
 
 # StrEmbed::StrEmbed_3_tree_editor.pm
 # StrEmbed-3 release A - HHC 2017-01-06
+# HHC - 2017-01-09 - post Release A
 
 require 5.002;
 use warnings;
