@@ -1,5 +1,5 @@
 README.TXT
-10 December 2106
+10 December 2016
 
 #    StrEmbed-3 - Embedding assembly structure on to a corresponding hypercube lattice
 #    Copyright (C) 2016  University of Leeds
