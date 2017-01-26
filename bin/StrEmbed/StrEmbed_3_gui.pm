@@ -18,7 +18,7 @@
 
 # StrEmbed::StrEmbed_3_gui.pm
 # StrEmbed-3 release A - HHC 2017-01-06
-# HHC - 2017-01-10 - post Release A
+# HHC - 2017-01-26 - Version 3 Release A Update 2 -- StrEmbed-3 (A2)
 
 require 5.002;
 use warnings;
@@ -26,10 +26,10 @@ use strict;
 use Tk;
 use Tk::Font;
 use Tk::Balloon;
-# use Tk::Hlist;
 use Tk::Tree;
 use Tk::DirTree;
-# use Tk::Dialog;
+use Tk::PNG;
+use Time::HiRes qw/usleep/;
 
 our $max;
 our %elements_available;
@@ -50,6 +50,7 @@ my $active_element_id = 1;
 my $active_element_label = 1;
 my %is_covered_by;
 my $tree;
+my $box;
 my $info;
 my $status;
 my $iterations;
@@ -58,10 +59,11 @@ my $counter;
 my $percentage;
 my $quit_optimisation;
 my %embedded;
-my %parts_at_height_1;
+my %parts_at_height_n;
 my %lookup_label_to_id;
 my $menu_00;
 my %entity;
+my $entity_focused;
 
 return 1;
 
@@ -188,7 +190,7 @@ sub tk_pulldown_menu {
                 &tk_setup_initial_colour_for_elements;
                 &tk_plot_elements;
                 &tk_embed_height_0;
-                &tk_embed_height_1;
+                &tk_embed_height_n;
                 &tk_highlight_relations;
                 &tk_highlight_is_covered_by;
                 &tk_clear_canvas;
@@ -211,7 +213,7 @@ sub tk_pulldown_menu {
             # [ 'command' => "~Generate", -command => sub { &hypercube_corresponding_to_step_file } ],
             # [ 'command' => "~Embed",    -command => sub { &tk_embed } ],
             [ 'command' => "Embed ~0",  -command => sub { &tk_embed_height_0 } ],
-            [ 'command' => "Embed ~1",  -command => sub { &tk_embed_height_1 } ],
+            [ 'command' => "Embed ~1",  -command => sub { &tk_embed_height_n } ],
             [ 'command' => "~Highlight relations", -command => sub { &tk_highlight_relations } ],
             [ 'command' => "Highlight is ~covered by", -command => sub { &tk_highlight_is_covered_by } ],            
             # [ 'command' => "Embed ~Test",  -command => sub { &tk_embed_test } ],
@@ -491,7 +493,7 @@ sub big_bundle {
     &tk_setup_initial_colour_for_elements;
     &tk_plot_elements;
     &tk_embed_height_0;
-    &tk_embed_height_1;
+    &tk_embed_height_n;
     &tk_highlight_relations;
     &tk_highlight_is_covered_by;
     &tk_clear_canvas;
@@ -553,33 +555,255 @@ sub tk_insert_tree_items {
     }
     $tree -> autosetmode;
     $tree -> focusFollowsMouse;
-    $tree -> bind('<Button-3>' => \&tk_callback_tree);
+    # $tree -> bind('<Button-3>' => \&tk_callback_tree);   # B3
+    $tree -> bind('<Button-2>' => \&tk_callback_B2);     # B2
+
+    $tree -> configure(
+        -browsecmd => \&tk_callback_entity_browse,
+        # -command => \&tk_callback_entity,                # double-click-B1
+    );
 
     while (my ($name, $value) = each %entity) {
         # print "$name = $value\n";    # switched off 2017-01-16
     }
 }
 
+sub tk_callback_B2 {
+    my @list = @_;
+    print "B2 - @list\n";
+}
+
 sub tk_callback_tree{
-    print "tk_callback_tree\n";
+    my @list = @_;
+    print "tk_callback_tree - @list\n";
 }
 
 sub tk_callback_entity {
-    print "tk_callback_entity\n";
-    
+    my $entity = shift;
+    print "clicked entity > $entity\n";
+    our $option_menu = $mw -> Menu(
+        # -label => "Re-arrange tree",
+        # -options => ["move up", "move down", "level up", "create sub-assy"],
+        # -command => \&tk_callback_entity_options,
+    ) -> pack(
+        # -x => $tree -> rootx + 300,
+        # -y => $tree -> rooty,
+    );
+}
+
+### POPUP
+
+sub XXXX_tk_callback_entity {
+    my $entity = shift;
+    print "clicked entity > $entity\n";
+    our $option_menu -> Menu(
+        -tearoff => 0,
+    );
+    $option_menu = $mw->Menu(-tearoff => 0);
+    $option_menu -> add('separator');
+    $option_menu -> add('command', -label => 'One', -command => \&item1);
+    $option_menu -> add('command', -label => 'Two', -command => \&item2);
+    $tree -> bind('<3>', [\&showmenu, Ev('X'), Ev('Y'), Ev('W')]);
+    $tree -> focus();
+}
+
+sub showmenu {
+  my ($self, $x, $y, $widget) = @_;
+  my $label = $widget -> cget('text');
+  our $option_menu -> insert(0, 'command',
+    -label => $label,
+    -command => sub { print "Clicked $label.\n" },
+  );
+  $option_menu -> post($x, $y);
+  $option_menu -> delete(0,0);
+}
+
+sub item1 { print "Item 1!\n" }
+sub item2 { print "Item 2!\n" }
+
+### END POPUP
+
+sub tk_callback_entity_options {
+    our $option_menu;
+    my $option = shift;
+    print "got: $option\n";
+    # $option_menu -> destroy ;
+}
+
+sub tk_callback_entity_browse {
+    ### THIRD BUTTON MENU CALLBACK
+    $entity_focused = shift;
+    my @list = @_;
+    print "$entity_focused @list\n";    
+    # print "tk_callback_entity (browse) - ";
+    # print "browsed item = .$entity_focused. >@list<\n";    
 }
 
 sub tk_assembly_tree {
-    $tree = $mw -> Scrolled( "Tree",
-        -scrollbars => 'se',
-        -width => 40,
+    my $f_tree = $mw -> Frame(
+        -width => 60,
         -label => "Assembly tree",
     ) -> pack(
         -fill => 'both',
         -side => 'left',
         -expand => 1,
+
     );
+
+    # $f_tree -> configure(-state => 'normal');
+
+    $tree = $f_tree -> Scrolled( "Tree",
+        -scrollbars => 'se',
+        -width => 40,
+    ) -> pack(
+        -fill => 'both',
+        -expand => 1,
+    );
+
+    my $label = $f_tree -> Entry(
+        -text => "Current entity",
+        -state => 'readonly',
+        -relief => 'flat',
+        -font => ['*font', '10', 'bold'],
+    ) -> pack(
+        -side => 'top',
+        -fill => 'x',
+        # -expand => 1,
+    );
+
+    my $current_entry = $f_tree -> Scrolled('Entry',
+        -text => \$entity_focused,
+        -state => 'readonly',
+        -scrollbars => 's',
+    ) -> pack(
+        -side => 'top',
+        -fill => 'x',
+        # -expand => 1,
+    );
+
+    my $box = $f_tree -> Frame(
+        # -scrollbars => 'se',
+        -width => 40,
+    ) -> pack(
+        -side => 'bottom',
+        # -fill => 'both',
+        # -expand => 1,
+    );
+    $box -> focusFollowsMouse;
+
+    my $icon_scroll_up_up     = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-up-double-icon-small.png");
+    my $icon_scroll_up        = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-up-icon-small.png");
+    my $icon_scroll_down      = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-down-icon-small.png");
+    my $icon_scroll_down_down = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-down-double-icon-small.png");
+    my $icon_level_up         = $box->Photo(-file => "./resources/icons/32x32/Actions-go-previous-icon-small.png");
+    my $icon_level_down       = $box->Photo(-file => "./resources/icons/32x32/Actions-go-next-icon-small.png");
+
+    my $button1 = $box -> Button(
+        -command => \&button_up_up,
+        -image => $icon_scroll_up_up,
+    ) -> pack (
+        -side => 'top',
+    );
+
+    my $button1a = $box -> Button(
+        -command => \&button_up,
+        -image => $icon_scroll_up,
+    ) -> pack (
+        -side => 'top',
+    );
+
+    my $button4 = $box -> Button(
+        -command => \&button_down_down,
+        -image => $icon_scroll_down_down,
+        # -text => "To the bottom",
+    ) -> pack (
+        -side => 'bottom',
+    );
+
+    my $button1b = $box -> Button(
+        -command => \&button_down,
+        -image => $icon_scroll_down,
+    ) -> pack (
+        -side => 'bottom',
+    );
+
+    my $button2 = $box -> Button(
+        -command => \&button_left,
+        -image => $icon_level_up,
+    ) -> pack (
+        -side => 'left',
+        -expand => 1,
+        # -fill => 'x',
+    );
+
+    my $button3 = $box -> Button(
+        -command => \&button_right,
+        -image => $icon_level_down,
+    ) -> pack (
+        -side => 'right',
+        -expand => 1,
+        # -fill => 'x',
+    );
+
+    my $balloons = $box -> Balloon(
+        -background => 'gray95',
+    );
+    my $b1  = $balloons -> attach($button1,  -balloonmsg => "Scroll to Top", -statusmsg => "Status bar message");
+    my $b1a = $balloons -> attach($button1a, -balloonmsg => "Scroll Up", -statusmsg => "Status bar message");
+    my $b1b = $balloons -> attach($button1b, -balloonmsg => "Scroll Down", -statusmsg => "Status bar message");
+    my $b4  = $balloons -> attach($button4,  -balloonmsg => "Scroll to Bottom", -statusmsg => "Status bar message");
+    my $b2  = $balloons -> attach($button2,  -balloonmsg => "Move Level Up", -statusmsg => "Status bar message");
+    my $b3  = $balloons -> attach($button3,  -balloonmsg => "Move Level Down", -statusmsg => "Status bar message");
 }
+
+### button callbacks
+
+sub XX_tk_callback_entity_browse {
+    ### THIRD BUTTON MENU CALLBACK
+    my @list = @_;
+    $entity_focused = $list[0];
+    print "tk_callback_entity (browse) - ";
+    print "browsed item = @list\n";    
+}
+
+sub XX_tk_callback_entity {
+    my $entity = shift;
+    print "clicked entity > $entity\n";
+    our $option_menu -> Menu(
+        -tearoff => 0,
+    );
+    $option_menu = $mw->Menu(-tearoff => 0);
+    $option_menu -> add('separator');
+    $option_menu -> add('command', -label => 'One', -command => \&item1);
+    $option_menu -> add('command', -label => 'Two', -command => \&item2);
+    $tree -> bind('<3>', [\&showmenu, Ev('X'), Ev('Y'), Ev('W')]);
+    $tree -> focus();
+}
+
+sub button_up_up {
+    print "button - scroll to top\n";
+}
+
+sub button_up {
+    print "button - scroll up\n";
+}
+
+sub button_down {
+    print "button - scroll down\n";
+}
+
+sub button_down_down {
+    print "button - scroll to bottom\n";
+}
+
+sub button_left {
+    print "button - level up\n";
+}
+
+sub button_right {
+    print "button - level down\n";
+}
+
 
 ### middle canvas
 
@@ -659,6 +883,7 @@ sub tk_embed_height_0 {
    my ($e) = &hypercube_elements_at_height(0);
    # print "height 0 = $e\n";
    $array_lookup_id_to_hash{$e}{label} = "0";
+   $array_lookup_id_to_hash{$e}{active} = 1;
    $embedded{0} = 0;
    # $elements_available{0} = 0;  ??? inf zero - set to unavailable ???
 }
@@ -675,20 +900,20 @@ sub fisher_yates_shuffle {
     }
 }
 
-sub tk_embed_height_1 {
-    my @height_1 = &hypercube_elements_at_height(1);
+sub tk_embed_height_n {
+    my @height_n = &hypercube_elements_at_height(1);
     my @atoms = &step_count_atomic_part;
-    # print "height 1 = @height_1\n";
+    # print "height n = @height_n\n";
     my $top_level_assembly = &step_top_level_assembly;
 
     ### set up atoms as available for embedding $embedded{$e}=1
     for (my $i=0; $i<=$#atoms; $i++) {
         my $atom = $atoms[$i];
-        my $element = $height_1[$i];
+        my $element = $height_n[$i];
         # print "$atom - $element\n";
         # $array_lookup_id_to_hash{$element}{label} = $atom;    # need to do dynamically
         $embedded{$atom} = 1;
-        $parts_at_height_1{$atom} = 1;
+        $parts_at_height_n{$atom} = 1;
     }
 
     ### embed thingies
@@ -707,8 +932,8 @@ sub tk_embed_height_1 {
         foreach my $sibling (@siblings) {
             # print "sibling $sibling\n";
             $embedded{$sibling} = 0;
-            if (defined $parts_at_height_1{$sibling}) {
-                my $id = &next_available_height_1($sibling, @height_1);
+            if (defined $parts_at_height_n{$sibling}) {
+                my $id = &next_available_height_n($sibling, @height_n);
                 $lookup_label_to_id{$sibling} = $id;
             }
             $embedded{$parent} = 1;
@@ -747,7 +972,7 @@ sub tk_embed_height_1 {
     EXIT:;
 }
 
-sub next_available_height_1 {
+sub next_available_height_n {
     my $sibling = shift;
     my @list = @_;
     # &fisher_yates_shuffle( \@list );   # sounds good but actually not a good idea
@@ -1004,8 +1229,9 @@ sub tk_optimise {
     $iterations = 0;
     my $number_of_times = 9999;
 
+    $quit_optimisation = 0;    # need to sort out needing to multiple "Quit" button clicks
     LABEL: while ($zeros <= 2) {    # consider optimised when three sets of 10,000 zeros
-        $quit_optimisation = 0;
+    usleep 1;    # need to sort out needing to multiple "Quit" button clicks
         $counter = 0;
         foreach (0..$number_of_times) {
             my $element_count = 1 << $max;
