@@ -17,8 +17,8 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # StrEmbed::StrEmbed_3_STEP.pm
-# StrEmbed-3 release A - HHC 2017-01-06
-# HHC - 2017-01-09 - post Release A
+# StrEmbed-3 Release A - HHC 2017-01-06
+#            Release B - HHC 2017-01-31
 
 require 5.002;
 use warnings;
@@ -264,9 +264,10 @@ sub step_delete_old {
     &find_to_be_deleted_shape_def_rep;
     &find_old_pds;
     &delete_entities;
+    # print "delete entities ...\n";
 }
 
-sub step_save {
+sub XXX_step_save {
     print "saving STEP file\n";
     &output_step_file;
 }
@@ -328,7 +329,8 @@ sub read_step_file {
 }
 
 sub output_step_file {
-    my $filename = "../step_data/output/pp.STEP";
+    my $filename = shift;
+    # my $filename = "../step_data/output/pp.STEP";
     open( my $fh, '>', $filename) or die "Could not open file '$filename' $!";
     print $fh $preamble;
     print $fh "$_ = $line{$_} ;\n" foreach &hash_sort( keys %line );
@@ -340,9 +342,9 @@ sub output_step_file {
 sub step_main_loop {
     #&create_new_shape_def_rep(qw/ABCDE A B C D E/);
 
-    &create_new_shape_def_rep(qw/ABC A B C/);
-    &create_new_shape_def_rep(qw/DE D E/);
-    &create_new_shape_def_rep(qw/ABCDE ABC DE/);
+    # &create_new_shape_def_rep(qw/ABC A B C/);
+    # &create_new_shape_def_rep(qw/DE D E/);
+    # &create_new_shape_def_rep(qw/ABCDE ABC DE/);
 
     #&create_new_shape_def_rep(qw/AA A/);
     #&create_new_shape_def_rep(qw/AAB AA B/);

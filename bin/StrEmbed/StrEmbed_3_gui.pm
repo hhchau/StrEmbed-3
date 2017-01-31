@@ -18,7 +18,9 @@
 
 # StrEmbed::StrEmbed_3_gui.pm
 # StrEmbed-3 release A - HHC 2017-01-06
+# HHC - 2017-01-16 - Version 3 Release A Update 1 -- StrEmbed-3 (A1)
 # HHC - 2017-01-26 - Version 3 Release A Update 2 -- StrEmbed-3 (A2)
+# HHC - 2017-01-30 - carry on
 
 require 5.002;
 use warnings;
@@ -64,6 +66,17 @@ my %lookup_label_to_id;
 my $menu_00;
 my %entity;
 my $entity_focused;
+my $tree_cache;
+my @available_atoms_n_subassemblies;
+my $chosen_part;
+my $chosen_index;
+my @list_of_assembly_parts;
+my $new_assy_name;
+my @assy_list_of_list;
+my $assy_counter = 1;
+my $ff_button_assy;
+my $ff_button_parts;
+my $menu_01;
 
 return 1;
 
@@ -80,13 +93,22 @@ sub tk_mainloop {
     $mw -> minsize($x_min, $y_min);
     $mw -> optionAdd('*font', 'Helvetica 10');
     my $label = $mw -> Label(-text => "StrEmbed-3")->pack;
+    my $icon = $mw -> Photo(-file => "./resources/icons/32x32/Actions-document-edit-icon-40.gif");
+    # $mw->idletasks;        # this line is crucial
+    $mw->iconimage($icon);
     
     &tk_pulldown_menu;
     &tk_lower_frame;
     &tk_assembly_tree;
     &tk_canvas;
+    # &tk_create_new_assy_from_atoms;
 
     MainLoop;
+}
+
+sub XXX_tk_create_new_assy_from_atoms {
+    my @atoms = &step_count_atomic_part;
+    print "xxx @atoms\n";
 }
 
 sub tk_pulldown_menu {
@@ -101,25 +123,26 @@ sub tk_pulldown_menu {
         -fill => 'x',
     );
 
-    $menu_00 = $pm -> Menubutton( -text => "File",
+    $menu_00 = $pm -> Menubutton( -text => "Open",
         -menuitems => [
-            [ 'command' => "Open",             -command => sub { &open_file} ],
-            [ 'command' => "puzzle 1b",        -command => sub { &step_open("../step_data/input/puzzle_1b.STEP"); &big_bundle; } ],
-            [ 'command' => "puzzle 1c",        -command => sub { &step_open("../step_data/input/puzzle_1c.STEP"); &big_bundle; } ],
-            [ 'command' => "puzzle 1d",        -command => sub { &step_open("../step_data/input/puzzle_1d.STEP"); &big_bundle; } ],
-            [ 'command' => "lock assembly eg", -command => sub { &step_open("../step_data/input/lock_assembly_eg.STEP"); &big_bundle; } ],
-            [ 'command' => "lock assy (flat)", -command => sub { &step_open("../step_data/input/lock_assy_5_parts_flat.STEP"); &big_bundle; } ],
-            [ 'command' => "lock assy (15 parts)", -command => sub { &step_open("../step_data/input/lock_6-pin_assembly_eg_less_one.STEP"); &big_bundle; } ],
+            # [ 'command' => "Open",                 -command => sub { &open_file} ],
+            [ 'command' => "puzzle 1b",            -command => sub { &step_open("../step_data/input/puzzle_1b.STEP"); &big_bundle; } ],
+            [ 'command' => "puzzle 1c",            -command => sub { &step_open("../step_data/input/puzzle_1c.STEP"); &big_bundle; } ],
+            [ 'command' => "puzzle 1d",            -command => sub { &step_open("../step_data/input/puzzle_1d.STEP"); &big_bundle; } ],
+            # [ 'command' => "lock assembly eg",     -command => sub { &step_open("../step_data/input/lock_assembly_eg.STEP"); &big_bundle; } ],
+            # [ 'command' => "lock assy (flat)",     -command => sub { &step_open("../step_data/input/lock_assy_5_parts_flat.STEP"); &big_bundle; } ],
+            # [ 'command' => "lock assy (15 parts)", -command => sub { &step_open("../step_data/input/lock_6-pin_assembly_eg_less_one.STEP"); &big_bundle; } ],
             "-",
-            [ 'command' => "~Exit",            -command => sub { exit } ],                      
+            [ 'command' => "~Exit",                -command => sub { exit } ],                      
         ]
     ) -> pack(
         -anchor => 'nw',
         -side => 'left',
     );
 
-    my $menu_01 = $pm -> Menubutton( -text => "Edit",
+    $menu_01 = $pm -> Menubutton( -text => "Save",
         -menuitems => [
+            [ 'command' => "~Save STEP file", -command => sub { &tk_save_step_file } ],
             [ 'command' => "~Exit", -command => sub { exit } ],
         ]
     ) -> pack(
@@ -127,7 +150,7 @@ sub tk_pulldown_menu {
         -side => 'left',
     );
 
-    my $menu_02 = $pm -> Menubutton( -text => "Unused",
+    my $menu_02 = $pm -> Menubutton( -text => "Background 2^n lattice",
         -menuitems => [
             [ 'command' => "O~ff", -command => sub { &tk_turn_off_is_covered_by } ],
             [ 'command' => "O~n", -command => sub { &tk_turn_on_is_covered_by } ],
@@ -136,7 +159,7 @@ sub tk_pulldown_menu {
         -anchor => 'nw',
         -side => 'left',
     );
-
+=ccc
     my $menu_03 = $pm -> Menubutton( -text => "Exit",
         -menuitems => [
             [ 'command' => "~Exit", -command => sub { exit } ],
@@ -258,13 +281,41 @@ sub tk_pulldown_menu {
         -anchor => 'nw',
         -side => 'left',
     );
+=cut
 
-    my $menu_98 = $pm -> Menubutton( -text => "Help",
-        -state => 'disabled',
+    my $menu_96 = $pm -> Menubutton( -text => "Plot",
+        -state => 'normal',
         -menuitems => [
-            [ 'command' => "Users' ~manual", -command => sub { &tk_users_manual } ],
-            [ 'command' => "~Copyright",     -command => sub { &tk_copyright } ],
+            [ 'command' => "~Resume optimisation", -command => sub {
+                &tk_clear_canvas;
+                &tk_optimise;
+                &tk_clear_canvas;
+                &tk_plot_is_covered_by;
+                &tk_plot_elements;
+                &tk_turn_off_is_covered_by;
+            } ],
+        ]
+    ) -> pack(
+        -anchor => 'nw',
+        -side => 'left',
+    );
+
+    my $menu_99 = $pm -> Menubutton( -text => "Help",
+        -state => 'normal',
+        -menuitems => [
+            # [ 'command' => "Users' ~manual", -command => sub { &tk_users_manual } ],
             [ 'command' => "~About",         -command => sub { &tk_about } ],
+            [ 'command' => "~Copyright",     -command => sub { &tk_copyright } ],
+        ]
+    ) -> pack(
+        -anchor => 'nw',
+        -side => 'right',
+    );
+
+    my $menu_98 = $pm -> Menubutton( -text => "Exit",
+        -state => 'normal',
+        -menuitems => [
+            [ 'command' => "~Exit",         -command => sub { exit } ],
         ]
     ) -> pack(
         -anchor => 'nw',
@@ -272,21 +323,76 @@ sub tk_pulldown_menu {
     );
 }
 
-sub XXX_tk_new_file {
-    print "tk_new_file\n";
-}
-
-sub XXX_tk_pass_tree {
-    my @list = &step_pass_tree;
-    print "$_\n" foreach @list;
-}
-
 sub tk_users_manual {
 }
 
 sub tk_about {
-    # need a pop up box
+    my $message = "University of Leeds
+The Open University
+
+StrEmbed-3
+Embedding design structures in engineering information
+
+Structure Embedding version 3 (StrEmbed-3) is a deliverable from the
+Embedding Design Structures in Engineering Information project,
+a Design The Future project funded by Engineering and Physical Sciences
+Research Council (grant reference EP/N005694/1).
+
+People
+
+The Design Structures in Engineering Information (Embedding) project is
+jointly hosted by the University of Leeds and The Open University.
+Members of the Embedding project are Amar Behera, Hau Hing Chau, Chris
+Earl, David Hogg, Alison McKay, Alan de Pennington and Mark Robinson.
+
+Getting help and reporting bugs
+
+Send help request and bug report to Hau Hing Chau <H.H.Chau\@leeds.ac.uk>
+School of Mechanical Engineering, University of Leeds, Leeds, LS2 9JT, UK.
+";
+
+    my $popup_about = new MainWindow;
+    my $about_text = $popup_about -> Text(
+        -background => 'gray95',
+        -relief => 'flat',
+    ) -> pack;
+    $about_text -> insert('end', $message);
+
 }
+
+sub tk_copyright {
+    my $message = "StrEmbed-3 - Embedding assembly structure on to a corresponding hypercube lattice
+Copyright (C) 2016  University of Leeds
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright acknowledgements
+
+Additional icons are obtatined from:
+1/ Icon Archive <http://www.iconarchive.com/>
+2/ Visual Phram <http://www.visualpharm.com/articles/icon_sizes.html>
+";
+
+    my $popup_copyright = new MainWindow;
+    my $about_text = $popup_copyright -> Text(
+        -background => 'gray95',
+        -relief => 'flat',
+    ) -> pack;
+    $about_text -> insert('end', $message);
+
+}
+
 
 ### lower tree, toggle, optimisation
 
@@ -301,6 +407,7 @@ sub tk_lower_frame {
     $info = $f -> Scrolled("Text",
         -height => 5,
         -scrollbars => 'e',
+        # -yscrollcommand => 1,
         -width => 20,
         -background => 'gray95',
         -relief => 'flat',
@@ -310,8 +417,8 @@ sub tk_lower_frame {
         -expand => 1,
     );
 
-    $info -> insert( 'end', "This spaced is reserved for changing assembly structure.",);
-    $info -> configure(-state => 'disabled');
+    $info -> insert( 'end', "This space is reserved for user messages.\n",);
+    # $info -> configure(-state => 'disabled');
 
     ### status
 
@@ -521,6 +628,10 @@ sub open_file {
     $popup -> minsize(640, 480);
     $popup -> optionAdd('*font', 'Helvetica 10');
     $popup -> Label(-text => "Open file")->pack;
+    # my $icon2 = $popup -> Photo(-file => "./resources/icons/32x32/Actions-document-edit-icon-40.gif");
+    # $popup->idletasks;        # this line is crucial
+    # $popup->iconimage($icon2);
+
 
     my $directory = $popup -> Scrolled( "DirTree",
         -directory => "../step_data/input",
@@ -546,6 +657,7 @@ sub tk_insert_tree_items {
     my @items = &step_produce_tree;
     foreach my $ref_list (@items) {
         my ($name, $item) = @{$ref_list};
+        # print "TREE: $item\n";
         # print "name = $name, item = $item\n";
         $entity{$name} = $tree -> add($item,
             -text => $name,
@@ -556,10 +668,10 @@ sub tk_insert_tree_items {
     $tree -> autosetmode;
     $tree -> focusFollowsMouse;
     # $tree -> bind('<Button-3>' => \&tk_callback_tree);   # B3
-    $tree -> bind('<Button-2>' => \&tk_callback_B2);     # B2
+    # $tree -> bind('<Button-2>' => \&tk_callback_B2);     # B2
 
     $tree -> configure(
-        -browsecmd => \&tk_callback_entity_browse,
+        # -browsecmd => \&tk_callback_entity_browse,
         # -command => \&tk_callback_entity,                # double-click-B1
     );
 
@@ -575,37 +687,23 @@ sub tk_callback_B2 {
 
 sub tk_callback_tree{
     my @list = @_;
-    print "tk_callback_tree - @list\n";
+    # print "B3 tk_callback_tree - @list\n";
 }
 
 sub tk_callback_entity {
     my $entity = shift;
     print "clicked entity > $entity\n";
     our $option_menu = $mw -> Menu(
-        # -label => "Re-arrange tree",
-        # -options => ["move up", "move down", "level up", "create sub-assy"],
-        # -command => \&tk_callback_entity_options,
+        -label => "Re-arrange tree",
+        -options => ["move up", "move down", "level up", "create sub-assy"],
+        -command => \&tk_callback_entity_options,
     ) -> pack(
-        # -x => $tree -> rootx + 300,
-        # -y => $tree -> rooty,
+        -x => $tree -> rootx + 300,
+        -y => $tree -> rooty,
     );
 }
 
 ### POPUP
-
-sub XXXX_tk_callback_entity {
-    my $entity = shift;
-    print "clicked entity > $entity\n";
-    our $option_menu -> Menu(
-        -tearoff => 0,
-    );
-    $option_menu = $mw->Menu(-tearoff => 0);
-    $option_menu -> add('separator');
-    $option_menu -> add('command', -label => 'One', -command => \&item1);
-    $option_menu -> add('command', -label => 'Two', -command => \&item2);
-    $tree -> bind('<3>', [\&showmenu, Ev('X'), Ev('Y'), Ev('W')]);
-    $tree -> focus();
-}
 
 sub showmenu {
   my ($self, $x, $y, $widget) = @_;
@@ -630,16 +728,36 @@ sub tk_callback_entity_options {
     # $option_menu -> destroy ;
 }
 
+### PROCESS TREE ENTITY(IES)
 sub tk_callback_entity_browse {
-    ### THIRD BUTTON MENU CALLBACK
-    $entity_focused = shift;
+    ### First button Tree entity callback
     my @list = @_;
-    print "$entity_focused @list\n";    
-    # print "tk_callback_entity (browse) - ";
-    # print "browsed item = .$entity_focused. >@list<\n";    
+    my $this_entity_name = shift @list;
+    if (@list) {
+        # print "B1 -- $entity_focused @list\n";
+        ($entity_focused, my @parents) = &tk_entity_strip($this_entity_name);
+        print "$entity_focused\n";
+        print "    $_\n" for @parents;
+        my @siblings = &tk_siblings($entity_focused);
+        my $parent = &tk_parent($entity_focused);
+        my @children = &covers($entity_focused);
+        print "    who is my parent? >$parent<\n" if $parent;
+        print "    who are my siblings? >@siblings<\n";
+        print "    who are my children? >@children<\n";
+    };    
+}
+
+sub tk_entity_strip {
+    my $input = shift;
+    my @list = split /\./, $input;
+    my $entity = pop @list;
+    return $entity, reverse @list;
 }
 
 sub tk_assembly_tree {
+
+    ### Frame for tree editing
+
     my $f_tree = $mw -> Frame(
         -width => 60,
         -label => "Assembly tree",
@@ -650,16 +768,27 @@ sub tk_assembly_tree {
 
     );
 
-    # $f_tree -> configure(-state => 'normal');
-
     $tree = $f_tree -> Scrolled( "Tree",
         -scrollbars => 'se',
         -width => 40,
     ) -> pack(
+        -side => 'top',
         -fill => 'both',
         -expand => 1,
     );
 
+    my $f_assy = $f_tree -> Frame(
+        -width => 60,
+        -label => "Create new assembly structure",
+    ) -> pack(
+        -fill => 'both',
+        -side => 'top',
+        -expand => 1,
+
+    );
+
+    ###
+=ccc
     my $label = $f_tree -> Entry(
         -text => "Current entity",
         -state => 'readonly',
@@ -680,6 +809,8 @@ sub tk_assembly_tree {
         -fill => 'x',
         # -expand => 1,
     );
+=cut
+    ###
 
     my $box = $f_tree -> Frame(
         # -scrollbars => 'se',
@@ -690,30 +821,35 @@ sub tk_assembly_tree {
         # -expand => 1,
     );
     $box -> focusFollowsMouse;
+    $box -> packForget;
 
-    my $icon_scroll_up_up     = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-up-double-icon-small.png");
-    my $icon_scroll_up        = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-up-icon-small.png");
+    my $icon_scroll_up_up     = $box->Photo(-file => "./resources/icons/visualpharm/stark_icons/PNG/1998_low_cost_clock/1998_low_cost_clock_32x32.png");
+    my $icon_scroll_up        = $box->Photo(-file => "./resources/icons/visualpharm/hardware_icons/PNG/png32/web_camera.png");
+    # my $icon_scroll_up_up     = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-up-double-icon-small.png");
+    # my $icon_scroll_up        = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-up-icon-small.png");
     my $icon_scroll_down      = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-down-icon-small.png");
     my $icon_scroll_down_down = $box->Photo(-file => "./resources/icons/32x32/Actions-arrow-down-double-icon-small.png");
-    my $icon_level_up         = $box->Photo(-file => "./resources/icons/32x32/Actions-go-previous-icon-small.png");
-    my $icon_level_down       = $box->Photo(-file => "./resources/icons/32x32/Actions-go-next-icon-small.png");
+    # my $icon_level_up         = $box->Photo(-file => "./resources/icons/32x32/arrow-left-icon-key.png");
+    # my $icon_level_down       = $box->Photo(-file => "./resources/icons/32x32/Actions-go-next-icon-small.png");
+    my $icon_level_up         = $box->Photo(-file => "./resources/icons/32x32/arrow-left-icon-key-small.png");
+    my $icon_level_down       = $box->Photo(-file => "./resources/icons/visualpharm/must_have_icon_set/Redo/Redo_32x32.png");
 
     my $button1 = $box -> Button(
-        -command => \&button_up_up,
+        -command => [\&tk_button_callback, "up up"],
         -image => $icon_scroll_up_up,
     ) -> pack (
         -side => 'top',
     );
 
     my $button1a = $box -> Button(
-        -command => \&button_up,
+        -command => [\&tk_button_callback, "up"],
         -image => $icon_scroll_up,
     ) -> pack (
         -side => 'top',
     );
 
     my $button4 = $box -> Button(
-        -command => \&button_down_down,
+        -command => [\&tk_button_callback, "down down"],
         -image => $icon_scroll_down_down,
         # -text => "To the bottom",
     ) -> pack (
@@ -721,14 +857,14 @@ sub tk_assembly_tree {
     );
 
     my $button1b = $box -> Button(
-        -command => \&button_down,
+        -command => [\&tk_button_callback, "down"],
         -image => $icon_scroll_down,
     ) -> pack (
         -side => 'bottom',
     );
 
     my $button2 = $box -> Button(
-        -command => \&button_left,
+        -command => [\&tk_button_callback, "level up"],
         -image => $icon_level_up,
     ) -> pack (
         -side => 'left',
@@ -737,7 +873,7 @@ sub tk_assembly_tree {
     );
 
     my $button3 = $box -> Button(
-        -command => \&button_right,
+        -command => [\&tk_button_callback, "level down"],
         -image => $icon_level_down,
     ) -> pack (
         -side => 'right',
@@ -754,11 +890,121 @@ sub tk_assembly_tree {
     my $b4  = $balloons -> attach($button4,  -balloonmsg => "Scroll to Bottom", -statusmsg => "Status bar message");
     my $b2  = $balloons -> attach($button2,  -balloonmsg => "Move Level Up", -statusmsg => "Status bar message");
     my $b3  = $balloons -> attach($button3,  -balloonmsg => "Move Level Down", -statusmsg => "Status bar message");
+
+    ### Frame for new assembly structure
+    my $ff_part_assy_names = $f_assy -> Frame (
+    ) -> pack(
+        -fill => 'both',
+        -side => 'left',
+        -expand => 1,
+    );
+
+    ###
+
+    my $ff_parts_array = $ff_part_assy_names -> Scrolled('Listbox',
+        -scrollbars => 'se',
+        -height => 6,
+        # -width => 20,
+    ) -> pack(
+        -side => 'top',
+        -fill => 'x',
+    );
+
+    $ff_parts_array -> bind('<<ListboxSelect>>' => [
+        \&tk_ff_parts_array_select_part,
+        "dadsds",
+    ]);
+
+    sub tk_ff_parts_array_select_part{
+        my @part = @_;
+        my @index = $part[0] -> curselection;
+        $chosen_index = $index[0];
+        $chosen_part = $available_atoms_n_subassemblies[$index[0]];
+        # print "adsadfafsa - @part - $chosen_index - $chosen_part\n";
+        $ff_button_parts -> configure(-state => 'normal');
+    }
+
+    $ff_parts_array -> insert('end', @available_atoms_n_subassemblies );
+    tie @available_atoms_n_subassemblies, "Tk::Listbox", $ff_parts_array;
+
+    $ff_button_parts = $ff_part_assy_names -> Button(
+        -text => "SELECT parts and/or sub-assemblies",
+        -command => [\&tk_button_parts, "tk button parts"],
+        -state => 'disabled',
+    ) -> pack (
+        -side => 'top',
+        -expand => 1,
+        -fill => 'x',
+    );
+
+    ###
+
+    my $ff_assy_name = $ff_part_assy_names -> Scrolled('Entry',
+        -textvariable => \$new_assy_name,
+        -scrollbars => 's',
+    ) -> pack(
+        -side => 'top',
+        -fill => 'x',
+    );
+
+    $ff_button_assy = $ff_part_assy_names -> Button(
+        -text => "CREATE a new sub- (or top level) assembly",
+        -command => [\&tk_button_assy, "tk button assy"],
+        -state => 'disabled',
+    ) -> pack (
+        -side => 'top',
+        -expand => 1,
+        -fill => 'x',
+    );
+
+    ###
 }
 
 ### button callbacks
 
-sub XX_tk_callback_entity_browse {
+sub tk_button_parts {
+    my $entry = shift;
+    # print "do sthg $chosen_part\n";
+    $info -> insert( 'end', qq(Part or sub-assembly "$chosen_part" is chosen\n),);
+    push @list_of_assembly_parts, $chosen_part;
+    # print "list of assembly parts @list_of_assembly_parts\n";
+    splice @available_atoms_n_subassemblies, $chosen_index, 1;
+    $new_assy_name = "assy_" . $assy_counter;
+    $ff_button_assy -> configure (-state => 'normal') if $#list_of_assembly_parts > 0;
+    $ff_button_parts -> configure(-state => 'disabled');
+}
+
+sub tk_button_assy {
+    # print "@list_of_assembly_parts ($new_assy_name)\n";
+    if ($new_assy_name =~ /^(?:[A-Za-z0-9_-]+,?)+(?<!,)$/) {
+        # print "good\n";
+        $info -> insert( 'end', qq(Sub-assembly "$new_assy_name" is created with part(s)/subassembly(ies) "@list_of_assembly_parts"\n), );
+        push @available_atoms_n_subassemblies, $new_assy_name if @available_atoms_n_subassemblies;
+        push @assy_list_of_list, [$new_assy_name, @list_of_assembly_parts];
+        @list_of_assembly_parts = ();
+        $assy_counter++;
+        $ff_button_assy -> configure (-state => 'disabled');
+        $info -> insert( 'end', qq(All done. Click "Save -> Save STEP file" to output an AP214 file.) ) if not @available_atoms_n_subassemblies;
+    } else {
+        # print "bad\n";
+        $info -> insert( 'end', "ERROR: Valid chars are A-Z a-z 0-9 _ -.  Please re-enter new assembly name\n");
+        $info -> insert( 'end', qq(Current selected part(s)/subassembly(ies) are "@list_of_assembly_parts"\n), );
+    }
+}
+
+sub tk_save_step_file {
+    &step_delete_old;
+    # print "$new_assy_name\n";
+    foreach my $set (@assy_list_of_list) {
+        my @list = @$set;
+        # print "xxx @list\n";
+        &create_new_shape_def_rep(@list);
+    }
+    &output_step_file("../step_data/output/" . $new_assy_name . ".step");
+    $menu_01 -> configure(-state => 'disabled');
+}
+
+sub XXX_tk_callback_entity_browse {
     ### THIRD BUTTON MENU CALLBACK
     my @list = @_;
     $entity_focused = $list[0];
@@ -780,30 +1026,10 @@ sub XX_tk_callback_entity {
     $tree -> focus();
 }
 
-sub button_up_up {
-    print "button - scroll to top\n";
+sub tk_button_callback {
+    my $arrow = shift;
+    print "button - scroll to top <$arrow>\n";
 }
-
-sub button_up {
-    print "button - scroll up\n";
-}
-
-sub button_down {
-    print "button - scroll down\n";
-}
-
-sub button_down_down {
-    print "button - scroll to bottom\n";
-}
-
-sub button_left {
-    print "button - level up\n";
-}
-
-sub button_right {
-    print "button - level down\n";
-}
-
 
 ### middle canvas
 
@@ -815,11 +1041,6 @@ sub tk_canvas {
     ) -> pack(
         -anchor => 'nw',
     );
-}
-
-sub XXX_tk_tree {
-    print "tk tree\n";
-    &step_tree;
 }
 
 ###
@@ -870,6 +1091,8 @@ sub tk_highlight_relations {
 
     ### highlight inf=zero to atom[s]
     my @atoms = &step_count_atomic_part;
+    # print "xxxxxx @atoms.\n";
+    @available_atoms_n_subassemblies = @atoms;
     foreach my $atom (@atoms) {
         my $id = $lookup_label_to_id{$atom};
         $is_covered_by{0}{$id}{colour} = 'black';
@@ -1002,15 +1225,6 @@ sub tk_to_be_embedded_list {
     return @list;
 }
 
-sub XXX_tk_embed_test {
-    print "tk_embed_test\n";
-    while (my ($element, $avail) = each %embedded) {
-        my @siblings = &tk_siblings($element);
-        my $parent = &tk_parent($element);
-        print "element $element is $avail. (@siblings) [$parent]\n" if $parent;
-    }
-}
-
 sub tk_count_atomic_part {
     ### i/p - %elements_available
     ### o/p - ??? what is the o/p?  Can I get rid of it in the main loop? ???
@@ -1047,36 +1261,6 @@ sub tk_siblings {
 sub tk_parent {
     my $element = shift;
     return &is_covered_by($element);
-}
-
-sub XXX_tk_embed {
-    # print "hypercube_embed\n";
-    ### copy from tk_count_atomic_part
-    ### i/p - %elements_available
-    ### o/p - ???
-    # print "tk/step count atomic part\n";
-    my @atoms = &step_count_atomic_part;
-    $max = $#atoms + 1;
-    # print "n = $max\n";
-
-    foreach my $atom (@atoms) {
-        my $available = &tk_is_atom_available($atom);
-        my @siblings = &tk_siblings($atom);
-        # print "$atom ($available) is an atom [@siblings]\n";
-    }
-
-    # print "tk/step count atomic part ... 2nd set\n";
-    foreach my $element (keys %elements_available) {
-        my $available = &tk_is_atom_available($element);
-        my @siblings;
-        if (&is_covered_by($element)) {
-            @siblings = &covers( &is_covered_by($element) );
-        } else {
-            @siblings = ();
-        }
-        # print "... $element ($available) has siblings @siblings.\n";
-        # print "    $element ($available) is a top level assembly\n" unless @siblings;
-    }
 }
 
 sub tk_is_atom_available {
@@ -1212,14 +1396,6 @@ sub tk_plot_elements {
             }
         }
     }
-}
-
-sub XXX_tk_plot_ids {
-    print "tk plot ids\n";
-}
-
-sub XXX_tk_plot_labels {
-    print "tk plot labels\n";
 }
 
 ###
